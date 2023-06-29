@@ -1,0 +1,23 @@
+{
+  "name": "pixelspace",
+  "version": "1.0.0",
+  "description": "collaborative painting app",
+  "main": "app.js",
+  "scripts": {
+    "test": "test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/itsgalo/pixelspace.git"
+  },
+  "author": "itsgalo",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/itsgalo/pixelspace/issues"
+  },
+  "homepage": "https://github.com/itsgalo/pixelspace#readme",
+  "dependencies": {
+    "express": "^4.18.2",
+    "socket.io": "^2.3.0"
+  }
+}
