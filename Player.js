@@ -1,7 +1,7 @@
 class Player {
   constructor(id, red, green, blue) {
-    this.x = Math.random() * 400 + 1;
-    this.y = Math.random() * 400 + 1;
+    this.x = Math.random() * 256 + 1;
+    this.y = Math.random() * 256 + 1;
     this.id = id;
 
     this.rgb = {

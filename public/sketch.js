@@ -1,5 +1,5 @@
 let socket;
-let closeButton, screenButton, colorButton, linkButton;
+let closeButton, screenButton, colorPicker, linkButton;
 let canvasIMG, updatedCanvas, bufferA, bufferB, bufferC;
 
 let W = window.innerWidth;
@@ -9,9 +9,9 @@ let M = DIM / 1000;
 
 let cursors = [];
 let players = [];
-let r = rand(155);
-let g = rand(20);
-let b = rand(155);
+let r = rand(255);
+let g = rand(255);
+let b = rand(255);
 let bgr = 105; //200 + rand(50);
 let bgg = 179; //170;
 let bgb = 231; //rand(250);
@@ -101,7 +101,7 @@ float indexValue(int idx) {
 
 vec4 posterize(in vec4 inputColor){
   float gamma = 2.2;
-  float numColors = 8.0;
+  float numColors = 255.0;
 
   vec3 c = inputColor.rgb;
   c = pow(c, vec3(gamma, gamma, gamma));
@@ -145,9 +145,9 @@ void main(void) {
   vec2 xyPos = floor(mod(pixelBin.xy, bayerSize));
   int idx = int(xyPos.x) + int(xyPos.y) * int(bayerSize);
 
-  vec4 dither = nearestColor(color + 4.0 * (indexValue(idx) / bayerDivider)); //bayerDivider normalizes the color range
+  vec4 dither = nearestColor(color + 5.0 * (indexValue(idx) / bayerDivider)); //bayerDivider normalizes the color range
 
-  gl_FragColor = vec4(dither.rgb, 1.0);
+  gl_FragColor = vec4(color.rgb, 1.0);
 }`
 
 const fsback = `
@@ -262,8 +262,27 @@ float snoise(vec4 v)
                + dot(m1*m1, vec2( dot( p3, x3 ), dot( p4, x4 ) ) ) ) ;
 
 }
+
+const int octaves = 4;
+
+float fbm(vec2 vuv) {
+  float amplitude = 0.5;
+  float freq = 2.0;
+	float value = 0.0;
+  vec2 shift = vec2(10.0);
+  mat2 rot = mat2(cos(0.5), sin(0.5), -sin(0.5), cos(0.5));
+
+  for(int i = 0; i < octaves; i++) {
+      value += amplitude * snoise(vec4(freq*vuv.x*1.+555., freq*vuv.y*1.+565., 0.01*time, 0.01*time));
+      vuv = rot * vuv * 2.0 + shift;
+      amplitude *= 0.6;
+      freq *= 1.0;//2
+  }
+  return value;
+}
+
 const float PI = 3.141592653;
-const float AngleDelta = PI / 16.0;
+const float AngleDelta = PI / 2.0;
 
 vec2 clampAngle(vec2 coord){
     float angle = AngleDelta;
@@ -277,14 +296,6 @@ vec2 clampAngle(vec2 coord){
 void main(void) {
   float gamma = 2.2;
 
-  // vec2 uv = gl_FragCoord.xy / u_resolution.xy;
-  // uv.y = 1.0 - uv.y;
-  
-  // vec2 pixelBin = gl_FragCoord.xy / floor(u_resolution.y/pixRes);
-  // vec2 tiles = u_resolution.xy / floor(u_resolution.y/pixRes);
-  // vec2 vuv = floor(pixelBin) / tiles;
-  // vuv.y = 1.0 - vuv.y;
-
   vec2 uv = vTexCoord;
   // the texture is loaded upside down and backwards by default so lets flip it
   uv.y = 1.0 - uv.y;
@@ -296,10 +307,12 @@ void main(void) {
   
   vec3 src = texture2D(tex0, uv).rgb;
   vec3 rgb = texture2D(tex1, uv).rgb;
-  float x = snoise(vec4(uv.x*3.0, uv.y*3.0, 0.2 * cos(time), 0.2 * sin(time)));
-  float y = snoise(vec4(uv.x*3.0+999.0, uv.y*3.0, 0.2 * sin(time), 0.2 * cos(time)));
-  vec2 offset = vec2(x*0.01, y*0.01);
-  rgb = texture2D(tex0, uv+offset).rgb;
+  // float x = snoise(vec4(uv.x*2.0, uv.y*2.0, 0.4 * (time), 0.2 * (time)));
+  // float y = snoise(vec4(uv.x*2.0+999.0, uv.y*2.0, 0.3 * (time), 0.2 * (time)));
+  float x = fbm(uv);
+  float y = fbm(uv+vec2(5.0, 1.0));
+  vec2 offset = vec2(x*0.005, y*0.005);
+  rgb = texture2D(tex0, uv + clampAngle(offset)).rgb;
   gl_FragColor = vec4(mix(rgb.rgb, src.rgb, 0.01), 1.0);
   //gl_FragColor = vec4(rgb, 1.0);
 }`
@@ -316,9 +329,12 @@ function setup() {
   bufferA.pixelDensity(1);
   bufferB.pixelDensity(1);
   bufferC.pixelDensity(1);
-  bufferB.noSmooth();
+
+  let tex = canvasIMG.getTexture(bufferC);
+  tex.setInterpolation(NEAREST, NEAREST);
 
   bufferC.background(255, 255, 255);
+  //bufferA.colorMode(HSB);
 
   socket = io.connect();
   socket.on('heartbeat', players => checkPlayers(players));
@@ -328,25 +344,24 @@ function setup() {
 
   closeButton = createButton('×');
   closeButton.position(20, 20);
-  closeButton.mousePressed(resetCanvas);
+  //closeButton.mousePressed(resetCanvas);
 
   screenButton = createButton('↓');
   screenButton.position(20, windowHeight - 100);
   screenButton.mousePressed(screenShot);
 
-  colorButton = createButton('#');
-  colorButton.position(windowWidth - 90, 20);
-  colorButton.mousePressed(changeColor);
+  colorPicker = createColorPicker('#ff00ff');
+  colorPicker.position(windowWidth - 90, 20);
 
-  linkButton = createButton('?');
+  linkButton = createButton('//');
   linkButton.position(windowWidth - 90, windowHeight - 100);
-  linkButton.mousePressed(goTo);
+  linkButton.mousePressed(toggleErase);
 
   shA = createShader(vs, fspost);
   shB = bufferB.createShader(vs, fsback);
 }
-function goTo() {
-  window.open('http://officeca.com');
+function toggleErase() {
+  isErasing = !isErasing;
 }
 function resetCanvas() {
   bufferC.background(255, 255, 255);
@@ -354,7 +369,7 @@ function resetCanvas() {
 }
 
 function screenShot() {
-  saveCanvas('OurPaperSpace', 'png');
+  saveCanvas('OurPixelSpace', 'png');
 }
 
 function newDrawing(data) {
@@ -366,6 +381,7 @@ function newDrawing(data) {
 function draw() {
   mx = map(mouseX, 0, width, 0, 1);
   my = map(mouseY, 0, height, 0, 1);
+  updateColor();
 
   shader(shA);
   shA.setUniform("u_resolution", [W, H]);
@@ -375,25 +391,29 @@ function draw() {
   shaderSwap();
   image(bufferC, -width/2, -height/2, width, height);
 
-  for(var i = 0; i < players.length; i++){
-    //bufferA.fill(255);
-    bufferA.noStroke();
-    //bufferA.ellipse(players[i].x * width, players[i].y * height, 50 * M);
-  }
-  if (keyIsPressed) {
-    isErasing = true;
-  } else {
-    isErasing = false;
-    changeColor();
-  }
-  //fadeGraphics(bufferA, 0.5);
+
+  bufferA.noStroke();
+  bufferA.rectMode(CENTER);
+
+  // for(var i = 0; i < players.length; i++){
+  //   //bufferA.fill(255);
+  //   bufferA.noStroke();
+  //   //bufferA.ellipse(players[i].x * width, players[i].y * height, 50 * M);
+  // }
+  // if (keyIsPressed) {
+  //   isErasing = true;
+  // } else {
+  //   isErasing = false;
+  //   changeColor();
+  // }
+  //fadeGraphics(bufferA, 1);
 }
 
 function shaderSwap() {
   bufferB.shader(shB);
   
   //shB.setUniform("u_resolution", [W, H]);
-  shB.setUniform("time", frameCount*0.01);
+  shB.setUniform("time", frameCount*0.1);
   //canvas you draw to
   shB.setUniform("tex0", bufferC);
   //buffer that takes image of drawing canvas
@@ -535,11 +555,11 @@ function mouseDragged(e) {
   return false;
 }
 
-function changeColor() {
+function updateColor() {
   if (thisPlayer != undefined) {
-    thisPlayer.rgb.r = random(0, 255);
-    thisPlayer.rgb.g = random(0, 255);
-    thisPlayer.rgb.b = random(0, 255);
+    thisPlayer.rgb.r = red(colorPicker.color());
+    thisPlayer.rgb.g = green(colorPicker.color());
+    thisPlayer.rgb.b = blue(colorPicker.color());
 
     r = thisPlayer.rgb.r;
     g = thisPlayer.rgb.g;
@@ -551,17 +571,17 @@ function drawBrush(d){
   //draw splat from this user
   if (d.e) {
     bufferA.erase();
-    bufferA.ellipse(d.x * 256, d.y * 256, 8);
+    bufferA.rect(d.x * 256, d.y * 256, 8);
     bufferA.noErase();
   } else {
     bufferA.fill(d.r, d.g, d.b);
-    bufferA.ellipse(d.x * 256, d.y * 256, 8);
+    bufferA.rect(d.x * 256, d.y * 256, 1);
   }
 }
 
 function windowResized() {
   closeButton.position(20, 20);
   screenButton.position(20, windowHeight - 100);
-  colorButton.position(windowWidth - 90, 20);
+  colorPicker.position(windowWidth - 90, 20);
   linkButton.position(windowWidth - 90, windowHeight - 100);
 }
