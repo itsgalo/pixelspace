@@ -131,8 +131,8 @@ void main(void) {
   bayer[14] = 13.0;
   bayer[15] = 5.0;
   
-  vec2 pixelBin = gl_FragCoord.xy / floor(u_resolution.y/256.);
-  vec2 tiles = u_resolution.xy / floor(u_resolution.y/256.);
+  vec2 pixelBin = gl_FragCoord.xy / floor(1.);
+  vec2 tiles = u_resolution.xy / floor(1.);
   vec2 uvBin = floor(pixelBin) / tiles;
   
   vec4 color = posterize(texture2D(tex0, uvBin));
@@ -142,7 +142,7 @@ void main(void) {
 
   vec4 dither = nearestColor(color + 5.0 * (indexValue(idx) / bayerDivider)); //bayerDivider normalizes the color range
 
-  gl_FragColor = vec4(color.rgb, 1.0);
+  gl_FragColor = vec4(dither.rgb, 1.0);
 }`
 
 const fsb = `
@@ -258,7 +258,7 @@ float snoise(vec4 v)
 
 }
 
-const int octaves = 4;
+const int octaves = 8;
 
 float fbm(vec2 vuv) {
   float amplitude = 0.5;
@@ -277,7 +277,7 @@ float fbm(vec2 vuv) {
 }
 
 const float PI = 3.141592653;
-const float AngleDelta = PI / 2.0;
+const float AngleDelta = PI / 180.0;
 
 vec2 clampAngle(vec2 coord){
     float angle = AngleDelta;
@@ -302,13 +302,13 @@ void main(void) {
   
   vec3 src = texture2D(tex0, uv).rgb;
   vec3 rgb = texture2D(tex1, uv).rgb;
-  // float x = snoise(vec4(uv.x*2.0, uv.y*2.0, 0.4 * (time), 0.2 * (time)));
-  // float y = snoise(vec4(uv.x*2.0+999.0, uv.y*2.0, 0.3 * (time), 0.2 * (time)));
+  // float x = snoise(vec4(uv.x*6.0, uv.y*6.0, 0.4 * (time), 0.2 * (time)));
+  // float y = snoise(vec4(uv.x*6.0+999.0, uv.y*6.0, 0.3 * (time), 0.2 * (time)));
   float x = fbm(uv);
   float y = fbm(uv+vec2(5.0, 1.0));
   vec2 offset = vec2(x*0.005, y*0.005);
   rgb = texture2D(tex0, uv + clampAngle(offset)).rgb;
-  src = mix(rgb.rgb, src.rgb, 0.5);
+  src = mix(rgb.rgb, src.rgb, 0.8);
      
   //gl_FragColor = vec4(clamp(sat(src.rgb, 1.001), 0.0, 1.0), 1.0);
 
@@ -341,18 +341,18 @@ function setup() {
 
   closeButton = createButton('×');
   closeButton.position(20, 20);
-  //closeButton.mousePressed(resetCanvas);
+  closeButton.mousePressed(toggleErase);
 
   screenButton = createButton('↓');
   screenButton.position(20, windowHeight - 100);
   screenButton.mousePressed(screenShot);
 
-  colorPicker = createColorPicker('#ff00ff');
+  colorPicker = createColorPicker('#0000ff');
   colorPicker.position(windowWidth - 90, 20);
 
   linkButton = createButton('//');
   linkButton.position(windowWidth - 90, windowHeight - 100);
-  linkButton.mousePressed(toggleErase);
+  //linkButton.mousePressed(toggleErase);
 }
 function toggleErase() {
   isErasing = !isErasing;
@@ -385,7 +385,7 @@ function draw() {
   shaderB.setUniform("tex0", bufferC);
   shaderB.setUniform("tex1", bufferA);
   shaderB.setUniform("seed", 0.0);
-  shaderB.setUniform("time", frameCount * 0.001);
+  shaderB.setUniform("time", frameCount * 0.1);
   rect(-width/2, -height/2, width, height);
   bufferB.end();
 
