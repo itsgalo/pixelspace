@@ -20,6 +20,7 @@ let alph = 1;
 let friendIsDrawing = false;
 let isDrawing = false;
 let isErasing = false;
+let instructionsVisible = false;
 let thisPlayer;
 let mx, my;
 let shA, shB;
@@ -135,7 +136,7 @@ void main(void) {
   vec2 tiles = u_resolution.xy / floor(1.);
   vec2 uvBin = floor(pixelBin) / tiles;
   
-  vec4 color = posterize(texture2D(tex0, uvBin));
+  vec4 color = texture2D(tex0, uvBin);
 
   vec2 xyPos = floor(mod(pixelBin.xy, bayerSize));
   int idx = int(xyPos.x) + int(xyPos.y) * int(bayerSize);
@@ -288,6 +289,13 @@ vec2 clampAngle(vec2 coord){
     return t;
 }
 
+//saturation function
+vec3 sat(vec3 rgb, float intensity) {
+  vec3 L = vec3(0.2125, 0.7154, 0.0721);
+  vec3 grayscale = (vec3(dot(rgb, L)));
+  return mix(grayscale, rgb, intensity);
+}
+
 void main(void) {
   float gamma = 2.2;
 
@@ -310,9 +318,9 @@ void main(void) {
   rgb = texture2D(tex0, uv + clampAngle(offset)).rgb;
   src = mix(rgb.rgb, src.rgb, 0.8);
      
-  //gl_FragColor = vec4(clamp(sat(src.rgb, 1.001), 0.0, 1.0), 1.0);
+  gl_FragColor = vec4(clamp(sat(src.rgb, 1.001), 0.0, 1.0), 1.0);
 
-  gl_FragColor = vec4(src, 1.0);
+  //gl_FragColor = vec4(src, 1.0);
 }`
 
 function setup() {
@@ -347,12 +355,12 @@ function setup() {
   screenButton.position(20, windowHeight - 100);
   screenButton.mousePressed(screenShot);
 
-  colorPicker = createColorPicker('#0000ff');
-  colorPicker.position(windowWidth - 90, 20);
+  colorPicker = createColorPicker('#fcba03');
+  colorPicker.position(windowWidth - 90, 40);
 
-  linkButton = createButton('//');
+  linkButton = createButton('?');
   linkButton.position(windowWidth - 90, windowHeight - 100);
-  //linkButton.mousePressed(toggleErase);
+  linkButton.mousePressed(instructions);
 }
 function toggleErase() {
   isErasing = !isErasing;
@@ -370,6 +378,18 @@ function newDrawing(data) {
   //draw what someone else is drawing
   drawBrush(data);
   //console.log(data.id + ' is drawing');
+}
+
+function instructions() {
+  instructionsVisible = !instructionsVisible;
+  const modal = document.getElementById("modal");
+
+  if (instructionsVisible) {
+    modal.style.visibility = "visible";
+  } else {
+    modal.style.visibility = "hidden";
+  }
+
 }
 
 function draw() {
