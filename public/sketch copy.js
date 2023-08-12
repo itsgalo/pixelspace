@@ -1,6 +1,6 @@
 let socket;
 let closeButton, screenButton, colorPicker, linkButton;
-let can, updatedCanvas, bufferA, bufferB, bufferC, bufferD;
+let canvasIMG, updatedCanvas, bufferA, bufferB, bufferC;
 
 let W = window.innerWidth;
 let H = window.innerHeight;
@@ -36,7 +36,7 @@ void main() {
   gl_Position = positionVec4;
 }`
 
-const fs = `
+const fspost = `
 #ifdef GL_ES
 precision mediump float;
 #endif
@@ -130,10 +130,15 @@ void main(void) {
   bayer[13] = 7.0;
   bayer[14] = 13.0;
   bayer[15] = 5.0;
+
+  // create texture coordinates based on pixelSize //
+  // vec2 uv=gl_FragCoord.xy/u_resolution.xy;
+  // uv.y = 1.0-uv.y;
   
   vec2 pixelBin = gl_FragCoord.xy / floor(u_resolution.y/256.);
   vec2 tiles = u_resolution.xy / floor(u_resolution.y/256.);
   vec2 uvBin = floor(pixelBin) / tiles;
+  uvBin.y = 1.0-uvBin.y;
   
   vec4 color = posterize(texture2D(tex0, uvBin));
 
@@ -145,7 +150,7 @@ void main(void) {
   gl_FragColor = vec4(color.rgb, 1.0);
 }`
 
-const fsb = `
+const fsback = `
 #ifdef GL_ES
 precision highp float;
 #endif
@@ -293,7 +298,7 @@ void main(void) {
 
   vec2 uv = vTexCoord;
   // the texture is loaded upside down and backwards by default so lets flip it
-  //uv.y = 1.0 - uv.y;
+  uv.y = 1.0 - uv.y;
 
   // float tiles = 20.0;
   // vec2 vuv = uv * tiles;
@@ -308,29 +313,27 @@ void main(void) {
   float y = fbm(uv+vec2(5.0, 1.0));
   vec2 offset = vec2(x*0.005, y*0.005);
   rgb = texture2D(tex0, uv + clampAngle(offset)).rgb;
-  src = mix(rgb.rgb, src.rgb, 0.5);
-     
-  //gl_FragColor = vec4(clamp(sat(src.rgb, 1.001), 0.0, 1.0), 1.0);
-
-  gl_FragColor = vec4(src, 1.0);
+  gl_FragColor = vec4(mix(rgb.rgb, src.rgb, 0.01), 1.0);
+  //gl_FragColor = vec4(rgb, 1.0);
 }`
 
 function setup() {
   window.innerHeight <= window.innerWidth ? (W = max(window.innerHeight, 1) * 1.0, H = max(window.innerHeight, 1)) : (W = max(window.innerWidth, 1), H = max(window.innerWidth, 1) / 1.0);
 
-  can = createCanvas(W, H, WEBGL);
-  pixelDensity(1);
-  shaderA = createShader(vs, fs);
-  shaderB = createShader(vs, fsb);
-  
-  bufferA = createFramebuffer({ format: FLOAT, textureFiltering: NEAREST });
-  bufferB = createFramebuffer({ format: FLOAT, textureFiltering: NEAREST });
-  bufferC = createFramebuffer({ format: FLOAT, textureFiltering: NEAREST });
-  bufferD = createFramebuffer({ format: FLOAT, textureFiltering: NEAREST });
+  canvasIMG = createCanvas(W, H, WEBGL);
 
-  bufferC.begin();
-  background(255, 255, 255);
-  bufferC.end();
+  bufferA = createGraphics(256, 256);
+  bufferB = createGraphics(256, 256, WEBGL);
+  bufferC = createGraphics(256, 256);
+  pixelDensity(1);
+  bufferA.pixelDensity(1);
+  bufferB.pixelDensity(1);
+  bufferC.pixelDensity(1);
+
+  let tex = canvasIMG.getTexture(bufferC);
+  tex.setInterpolation(NEAREST, NEAREST);
+
+  bufferC.background(255, 255, 255);
   //bufferA.colorMode(HSB);
 
   socket = io.connect();
@@ -353,6 +356,9 @@ function setup() {
   linkButton = createButton('//');
   linkButton.position(windowWidth - 90, windowHeight - 100);
   linkButton.mousePressed(toggleErase);
+
+  shA = createShader(vs, fspost);
+  shB = bufferB.createShader(vs, fsback);
 }
 function toggleErase() {
   isErasing = !isErasing;
@@ -373,41 +379,21 @@ function newDrawing(data) {
 }
 
 function draw() {
-  //normalize mouse coords
-  mx = map(mouseX - width/2, 0, width, 0, 1);
-  my = map(mouseY - height/2, 0, height, 0, 1);
+  mx = map(mouseX, 0, width, 0, 1);
+  my = map(mouseY, 0, height, 0, 1);
   updateColor();
 
-  // Draw to the framebuffer
-  bufferB.begin();
-  shader(shaderB);
-  shaderB.setUniform("u_resolution", [W, H]);
-  shaderB.setUniform("tex0", bufferC);
-  shaderB.setUniform("tex1", bufferA);
-  shaderB.setUniform("seed", 0.0);
-  shaderB.setUniform("time", frameCount * 0.001);
+  shader(shA);
+  shA.setUniform("u_resolution", [W, H]);
+  shA.setUniform("tex0", bufferC);
+  shA.setUniform("pixRes", 256.0);
   rect(-width/2, -height/2, width, height);
-  bufferB.end();
+  shaderSwap();
+  image(bufferC, -width/2, -height/2, width, height);
 
-  bufferC.begin();
-  image(bufferB, -width/2, -height/2, width, height);
-  image(bufferA, -width/2, -height/2, width, height);
-  bufferC.end();
-  
-  bufferD.begin();
-  shader(shaderA);
-  shaderA.setUniform("u_resolution", [W, H]);
-  shaderA.setUniform("tex0", bufferC);
-  shaderA.setUniform("pixRes", 256.0);
-  shaderA.setUniform("time", frameCount * 0.001);
-  rect(-width/2, -height/2, width, height);
-  bufferD.end();
-  
-  image(bufferD, -width/2, -height/2, width, height);
-  
-  bufferA.begin();
-  clear();
-  bufferA.end();
+
+  bufferA.noStroke();
+  bufferA.rectMode(CENTER);
 
   // for(var i = 0; i < players.length; i++){
   //   //bufferA.fill(255);
@@ -421,6 +407,26 @@ function draw() {
   //   changeColor();
   // }
   //fadeGraphics(bufferA, 1);
+}
+
+function shaderSwap() {
+  bufferB.shader(shB);
+  
+  //shB.setUniform("u_resolution", [W, H]);
+  shB.setUniform("time", frameCount*0.1);
+  //canvas you draw to
+  shB.setUniform("tex0", bufferC);
+  //buffer that takes image of drawing canvas
+  shB.setUniform("tex1", bufferA);
+  shB.setUniform("pixRes", 256.0);
+
+  //rect gives us some geometry on the screen
+  bufferB.rect(0, 0, width, height);
+  
+  //bufferC.background(0, 0, 0, 255);
+  bufferC.image(bufferB, 0, 0, 256, 256);//feedback
+  bufferC.image(bufferA, 0, 0, 256, 256);//drawing on top
+
 }
 
 function fadeGraphics(pg, fadeAmount) {
@@ -562,21 +568,14 @@ function updateColor() {
 }
 
 function drawBrush(d){
-  //draw brush from this user
+  //draw splat from this user
   if (d.e) {
-    bufferA.begin();
-    rectMode(CENTER);
-    erase();
-    rect(d.x * W, d.y * H, 20 * M);
-    noErase();
-    bufferA.end();
+    bufferA.erase();
+    bufferA.rect(d.x * 256, d.y * 256, 8);
+    bufferA.noErase();
   } else {
-    bufferA.begin();
-    rectMode(CENTER);
-    noStroke();
-    fill(d.r, d.g, d.b);
-    rect(d.x * W, d.y * H, 20 * M);
-    bufferA.end();
+    bufferA.fill(d.r, d.g, d.b);
+    bufferA.rect(d.x * 256, d.y * 256, 1);
   }
 }
 
