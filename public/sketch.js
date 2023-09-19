@@ -393,6 +393,12 @@ function instructions() {
 }
 
 function draw() {
+  if (isErasing) {
+    closeButton.elt.innerText = "■"
+  } else {
+    closeButton.elt.innerText = "×"
+  }
+  
   //normalize mouse coords
   mx = map(mouseX - width/2, 0, width, 0, 1);
   my = map(mouseY - height/2, 0, height, 0, 1);
